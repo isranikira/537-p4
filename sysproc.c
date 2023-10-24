@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "psched.h"
 
 int //set the current process's nice value to n and returns the old error or -1 on error
 sys_nice(int n)
@@ -72,19 +73,19 @@ int
 sys_sleep(void)
 {
   int n;
-  uint ticks0;
 
   if(argint(0, &n) < 0)
     return -1;
   acquire(&tickslock);
-  ticks0 = ticks;
-  while(ticks - ticks0 < n){
-    if(myproc()->killed){
-      release(&tickslock);
-      return -1;
-    }
-    sleep(&ticks, &tickslock);
+
+  int done_sleep = n + ticks;
+  sleep(&done_sleep, &tickslock);
+  if(myproc()->killed){
+    release(&tickslock);
+    return -1;
   }
+
+  
   //use the void pointer to compare global tick value to global tick value
   release(&tickslock);
   return 0;
