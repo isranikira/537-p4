@@ -77,7 +77,7 @@ sys_sleep(void)
   if(argint(0, &n) < 0)
     return -1;
   acquire(&tickslock);
-  int done_sleep = n + ticks;
+  ticks0 = ticks;
   while(ticks - ticks0 < n){
     if(myproc()->killed){
       release(&tickslock);
@@ -85,8 +85,7 @@ sys_sleep(void)
     }
     sleep(&ticks, &tickslock);
   }
-  //use the void pointer to compare global tick value to global tick value + n
-  //turn void pointer into int pointer
+  //use the void pointer to compare global tick value to global tick value
   release(&tickslock);
   return 0;
 }
