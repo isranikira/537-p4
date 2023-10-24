@@ -35,7 +35,7 @@ nice(void)
     return -1;
   }
   old_val = p->nice;
-  if(old_val < 0 || old_val > 20 || n < 0 || n > 20){
+  if(n < 0 || n > 20){
     return -1;
   }
   p->nice = n;  //if no errors return assign new nice value
@@ -143,11 +143,6 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-
-  //need to initially assign the cpu_ticks, total_ticks, and priority
-  p->ticks_total = 0;
-  p->nice = 0;
-  p->cpu_ticks = 0;
 
   release(&ptable.lock);
 
@@ -275,6 +270,10 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->nice =0;
+  np->priority = 0;
+  np->cpu_ticks = 0;
+  
 
   release(&ptable.lock);
 
@@ -383,11 +382,12 @@ void
 scheduler(void)
 {
   struct proc *p;
-  struct proc *same_priority[64];
-  int cnt = 64;
+  struct proc *same_prior[64];
+  int cnt = 0;
   struct cpu *c = mycpu();
   c->proc = 0;
-  int update_allowed = 1;
+  int update_en = 1;
+  
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -396,41 +396,43 @@ scheduler(void)
 
     //every 100 ticks need to recalculate priorities of each called - need to be own for loop for when we
     //re assign priority
-    if((ticks % 100 == 0) && update_allowed)
+    if((ticks % 100 == 0) && update_en)
     {
       for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
       {
         p -> cpu_ticks = p -> cpu_ticks / 2;
-        p -> priority = p -> cpu_ticks/2 + p -> nice;
+        p -> priority = (p -> cpu_ticks/2) + p -> nice;
       }
     }
     
     int min_priority = 100;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
+      {
         continue;
-      update_allowed = 1;
+      }
+
+      update_en = 1;
       //want to find the lowest priority of all the n  
       if(p->priority < min_priority)
       {
-        min_priority = p->priority;
         cnt = 0;
-        same_priority[cnt] = p;
+        min_priority = p->priority;
+        same_prior[cnt] = p;
       }
-      //need to check if it is equal and add it later
     }
-      
-    //if there was a process to run
-    if(cnt != 64)
+    
+
+    if(min_priority != 100)
     {
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = same_priority[cnt];
-      switchuvm(p);
-      same_priority[cnt]->state = RUNNING;
-      same_priority[cnt]->cpu_ticks = same_priority[cnt]->cpu_ticks + 1;
-      swtch(&(c->scheduler), same_priority[cnt_same_priority]->context);
+      c->proc = same_prior[cnt];
+      switchuvm(same_prior[cnt]);
+      same_prior[cnt]->state = RUNNING;
+      same_prior[cnt]->cpu_ticks = p->cpu_ticks + 1;
+      swtch(&(c->scheduler), same_prior[cnt]->context);
       switchkvm();
       //TODO: need to include priority assignment somehow
 
@@ -438,11 +440,10 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
-    else //there are no process to update do not give chance again until next tick
+    else
     {
-      update_allowed = 0;
+      update_en = 0;
     }
-    
     release(&ptable.lock);
 
   }//forever loop
